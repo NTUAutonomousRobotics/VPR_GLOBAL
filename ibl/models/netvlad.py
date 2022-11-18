@@ -60,7 +60,7 @@ class NetVLAD(nn.Module):
 
         return vlad
 
-    def foward_patch(self,x):
+    def forward_patch(self,x):
         N, C, H, W = x.shape
         x = self.forward(x)
         # [IMPORTANT] normalize

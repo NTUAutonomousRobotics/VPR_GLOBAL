@@ -184,7 +184,7 @@ def main_worker(args):
     model_cache = get_model(args)
 
     # Load from checkpoint
-    if args.resume:
+    if args.resume and os.path.isfile(args.resume):
         checkpoint = load_checkpoint(args.resume)
         copy_state_dict(checkpoint['state_dict'], model)
         start_epoch = checkpoint['epoch']+1
@@ -236,7 +236,7 @@ def main_worker(args):
                     elif 'weight' in name:
                         if id(p) in id_poolconv:
                             params_netvlad_w += [p]
-                        elif 'conv_sa' in name:
+                        elif 'conv_app' in name:
                             params_sa_w += [p]
                         else:
                             params_attention_w += [p]
@@ -274,6 +274,8 @@ def main_worker(args):
         if (gen==0):
             start_epoch = args.epochs-1
 
+        not_improved = 0
+
         for epoch in range(start_epoch, args.epochs):
 
             sampler.set_epoch(args.seed+epoch)
@@ -302,8 +304,10 @@ def main_worker(args):
                 is_best = recalls[0] > best_recall1
                 best_recall1 = max(recalls[0], best_recall1)
                 if is_best:
+                    not_improved = 0
                     print('The current result {} is the best!!!'.format(best_recall1))
                 else:
+                    not_improved += 1
                     print('The current best is still {}'.format(best_recall1))
 
                 if (args.rank==0):
@@ -316,8 +320,18 @@ def main_worker(args):
                     print('\n * Finished generation {:3d} epoch {:3d} recall@1: {:5.1%}  recall@5: {:5.1%}  recall@10: {:5.1%}  best@5: {:5.1%}{}\n'.
                           format(gen, epoch, recalls[0], recalls[1], recalls[2], best_recall1, ' *' if is_best else ''))
 
+                if not_improved > 30 / int(args.eval_step):
+                    print('Performance did not improve for 10 epochs. Stopping this generation.')
+                    break
+
             lr_scheduler.step()
             synchronize()
+
+            epoch_lr = []
+            for param_group in optimizer.param_groups:
+                epoch_lr.append(param_group['lr'])
+            print('epoch_lr:{}'.format(epoch_lr))
+            del epoch_lr
 
         start_epoch = 0
 

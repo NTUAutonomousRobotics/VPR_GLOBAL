@@ -102,10 +102,10 @@ def main_worker(args):
         checkpoint = load_checkpoint(args.resume)
         copy_state_dict(checkpoint['state_dict'], model)
         start_epoch = checkpoint['epoch']
-        best_recall5 = checkpoint['best_recall5']
+        best_recall1 = checkpoint['best_recall1']
         if (args.rank==0):
-            print("=> Start epoch {}  best recall5 {:.1%}"
-                  .format(start_epoch, best_recall5))
+            print("=> Start epoch {}  best recall1 {:.1%}"
+                  .format(start_epoch, best_recall1))
 
     # Evaluator
     evaluator = Evaluator(model)

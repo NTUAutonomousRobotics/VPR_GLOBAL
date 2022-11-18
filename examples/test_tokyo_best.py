@@ -6,6 +6,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from ibl import datasets
+from ibl import models
 from ibl.evaluators import Evaluator
 from ibl.utils.data import get_transformer_test
 from ibl.utils.data.sampler import DistributedSliceSampler
@@ -34,16 +35,16 @@ def get_data(args):
 
     return dataset, test_loader_q, test_loader_db
 
-def vgg16_netvlad(pretrained=False):
+def vgg16_netvlad(args, pretrained=False):
     base_model = models.create('vgg16', pretrained=False)
     pool_layer = models.create('netvlad', dim=base_model.feature_dim)
-    model = models.create('embednetpca', base_model, pool_layer)
+    model = models.create('embednetpca', base_model, pool_layer, region_sim_strategy=args.pooling)
     if pretrained:
         model.load_state_dict(torch.hub.load_state_dict_from_url('https://github.com/yxgeee/OpenIBL/releases/download/v0.1.0-beta/vgg16_netvlad.pth', map_location=torch.device('cpu')))
     return model
 
 def get_model(args):
-    model = vgg16_netvlad(pretrained=True)
+    model = vgg16_netvlad(args, pretrained=True)
     model.cuda(args.gpu)
     model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[args.gpu], output_device=args.gpu, find_unused_parameters=True

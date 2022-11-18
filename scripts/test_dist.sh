@@ -8,6 +8,8 @@ ARCH=vgg16
 DATASET=${2-pitts}
 SCALE=${3-250k}
 
+POOLING=isapvladv2
+
 if [ $# -lt 1 ]
   then
     echo "Arguments error: <MODEL PATH>"
@@ -29,5 +31,6 @@ examples/test.py --launcher pytorch \
     -d ${DATASET} --scale ${SCALE} -a ${ARCH} \
     --test-batch-size 16 -j 2 \
     --vlad --reduction \
-    --resume ${RESUME}
+    --resume ${RESUME} \
+    --pooling ${POOLING}
     # --sync-gather

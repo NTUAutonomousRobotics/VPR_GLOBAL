@@ -30,7 +30,7 @@ from ibl.utils.serialization import load_checkpoint, save_checkpoint, copy_state
 from ibl.utils.dist_utils import init_dist, synchronize, convert_sync_bn
 
 
-start_epoch = best_recall5 = 0
+start_epoch = best_recall1 = 0
 
 def get_data(args, iters):
     root = osp.join(args.data_dir, args.dataset)
@@ -114,7 +114,7 @@ def main():
     main_worker(args)
 
 def main_worker(args):
-    global start_epoch, best_recall5
+    global start_epoch, best_recall1
     init_dist(args.launcher, args)
     synchronize()
 
@@ -147,10 +147,10 @@ def main_worker(args):
         checkpoint = load_checkpoint(args.resume)
         copy_state_dict(checkpoint['state_dict'], model)
         start_epoch = checkpoint['epoch']+1
-        best_recall5 = checkpoint['best_recall5']
+        best_recall1 = checkpoint['best_recall1']
         if (args.rank==0):
-            print("=> Start epoch {}  best recall5 {:.1%}"
-                  .format(start_epoch, best_recall5))
+            print("=> Start epoch {}  best recall1 {:.1%}"
+                  .format(start_epoch, best_recall1))
 
     # Evaluator
     evaluator = Evaluator(model)
@@ -194,17 +194,17 @@ def main_worker(args):
                                     dataset.q_val, dataset.db_val, dataset.val_pos,
                                     vlad=args.vlad, gpu=args.gpu, sync_gather=args.sync_gather)
 
-            is_best = recalls[1] > best_recall5
-            best_recall5 = max(recalls[1], best_recall5)
+            is_best = recalls[0] > best_recall1
+            best_recall1 = max(recalls[0], best_recall1)
 
             if (args.rank==0):
                 save_checkpoint({
                     'state_dict': model.state_dict(),
                     'epoch': epoch,
-                    'best_recall5': best_recall5,
+                    'best_recall1': best_recall1,
                 }, is_best, fpath=osp.join(args.logs_dir, 'checkpoint'+str(epoch)+'.pth.tar'))
                 print('\n * Finished epoch {:3d} recall@1: {:5.1%}  recall@5: {:5.1%}  recall@10: {:5.1%}  best@5: {:5.1%}{}\n'.
-                      format(epoch, recalls[0], recalls[1], recalls[2], best_recall5, ' *' if is_best else ''))
+                      format(epoch, recalls[0], recalls[1], recalls[2], best_recall1, ' *' if is_best else ''))
 
         lr_scheduler.step()
         synchronize()

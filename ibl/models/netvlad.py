@@ -60,11 +60,21 @@ class NetVLAD(nn.Module):
 
         return vlad
 
+    def foward_patch(self,x):
+        N, C, H, W = x.shape
+        x = self.forward(x)
+        # [IMPORTANT] normalize
+        x = F.normalize(x, p=2, dim=2)  # intra-normalization
+        x = x.view(N, -1)  # flatten
+        x = F.normalize(x, p=2, dim=1)  # L2 normalize
+        return x
+
 class EmbedNet(nn.Module):
-    def __init__(self, base_model, net_vlad):
+    def __init__(self, base_model, net_vlad, region_sim_strategy='netvlad'):
         super(EmbedNet, self).__init__()
         self.base_model = base_model
         self.net_vlad = net_vlad
+        self.region_sim_strategy = region_sim_strategy
 
     def _init_params(self):
         self.base_model._init_params()
@@ -75,18 +85,21 @@ class EmbedNet(nn.Module):
         vlad_x = self.net_vlad(x)
 
         # [IMPORTANT] normalize
-        vlad_x = F.normalize(vlad_x, p=2, dim=2)  # intra-normalization
-        vlad_x = vlad_x.view(x.size(0), -1)  # flatten
-        vlad_x = F.normalize(vlad_x, p=2, dim=1)  # L2 normalize
+        if self.region_sim_strategy == 'netvlad':
+            # normalize
+            vlad_x = F.normalize(vlad_x, p=2, dim=2)  # intra-normalization
+            vlad_x = vlad_x.view(x.size(0), -1)  # flatten
+            vlad_x = F.normalize(vlad_x, p=2, dim=1)  # L2 normalize
 
         return pool_x, vlad_x
 
 class EmbedNetPCA(nn.Module):
-    def __init__(self, base_model, net_vlad, dim=4096):
+    def __init__(self, base_model, net_vlad, dim=4096, region_sim_strategy='netvlad'):
         super(EmbedNetPCA, self).__init__()
         self.base_model = base_model
         self.net_vlad = net_vlad
         self.pca_layer = nn.Conv2d(net_vlad.num_clusters*net_vlad.dim, dim, 1, stride=1, padding=0)
+        self.region_sim_strategy = region_sim_strategy
 
     def _init_params(self):
         self.base_model._init_params()
@@ -96,10 +109,11 @@ class EmbedNetPCA(nn.Module):
         _, x = self.base_model(x)
         vlad_x = self.net_vlad(x)
 
-        # [IMPORTANT] normalize
-        vlad_x = F.normalize(vlad_x, p=2, dim=2)  # intra-normalization
-        vlad_x = vlad_x.view(x.size(0), -1)  # flatten
-        vlad_x = F.normalize(vlad_x, p=2, dim=1)  # L2 normalize
+        if self.region_sim_strategy == 'netvlad':
+            # normalize
+            vlad_x = F.normalize(vlad_x, p=2, dim=2)  # intra-normalization
+            vlad_x = vlad_x.view(x.size(0), -1)  # flatten
+            vlad_x = F.normalize(vlad_x, p=2, dim=1)  # L2 normalize
 
         # reduction
         N, D = vlad_x.size()

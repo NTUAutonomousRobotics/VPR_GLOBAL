@@ -10,6 +10,10 @@ LOSS=sare_ind
 LR=0.001
 
 POOLING=netvlad
+EPOCHS=5
+#5
+GENERATIONS=5
+# 4
 
 while true # find unused tcp port
 do
@@ -27,7 +31,7 @@ examples/netvlad_img_sfrs.py --launcher pytorch --tcp-port ${PORT} \
   --width 640 --height 480 --tuple-size 1 -j 2 --test-batch-size 16 \
   --neg-num 10  --pos-pool 20 --neg-pool 1000 --pos-num 10 \
   --margin 0.1 --lr ${LR} --weight-decay 0.001 --loss-type ${LOSS} --soft-weight 0.5 \
-  --eval-step 1 --epochs 5 --step-size 5 --cache-size 1000 --generations 4 --temperature 0.07 0.07 0.06 0.05 \
-  --logs-dir logs/netVLAD/${DATASET}${SCALE}-${ARCH}/${LAYERS}-${LOSS}-lr${LR}-tuple${GPUS}-SFRS \
+  --eval-step 1 --epochs $EPOCHS --step-size 5 --cache-size 1000 --generations $GENERATIONS --temperature 0.07 0.07 0.06 0.05 \
+  --logs-dir logs/${POOLING}/${DATASET}${SCALE}-${ARCH}/${LAYERS}-${LOSS}-lr${LR}-tuple${GPUS}-SFRS \
   --pooling ${POOLING}
   # --sync-gather

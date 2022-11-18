@@ -27,7 +27,7 @@ done
 $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT --use_env \
 examples/test.py --launcher pytorch \
     -d ${DATASET} --scale ${SCALE} -a ${ARCH} \
-    --test-batch-size 32 -j 2 \
+    --test-batch-size 16 -j 2 \
     --vlad --reduction \
     --resume ${RESUME}
     # --sync-gather

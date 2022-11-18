@@ -25,6 +25,10 @@ from ibl.pca import PCA
 from ibl.utils.serialization import load_checkpoint, save_checkpoint, copy_state_dict, write_json
 from ibl.utils.dist_utils import init_dist, synchronize
 
+import os
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 def get_data(args):
     root = osp.join(args.data_dir, args.dataset)
@@ -170,4 +174,8 @@ if __name__ == '__main__':
                         default=osp.join(working_dir, 'data'))
     parser.add_argument('--logs-dir', type=str, metavar='PATH',
                         default=osp.join(working_dir, 'logs'))
+
+    # pooling options
+    parser.add_argument('--pooling', type=str, default='netvlad', help='type of pooling to use',
+                        choices=['netvlad', 'appsvr'])
     main()

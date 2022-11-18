@@ -29,6 +29,11 @@ from ibl.utils.serialization import load_checkpoint, save_checkpoint, copy_state
 from ibl.utils.dist_utils import init_dist, synchronize, convert_sync_bn
 from ibl.utils.rerank import re_ranking
 
+import os
+from os.path import join, exists
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 start_epoch = start_gen = best_recall5 = 0
 
@@ -93,18 +98,48 @@ def update_sampler(sampler, model, loader, query, gallery, sub_set, rerank=False
     sampler.sort_gallery(distmat, distmat_jac, sub_set)
     del distmat, distmat_jac
 
-def get_model(args):
-    base_model = models.create(args.arch, train_layers=args.layers, matconvnet='logs/vd16_offtheshelf_conv5_3_max.pth')
-    pool_layer = models.create('netvlad', dim=base_model.feature_dim)
-    initcache = osp.join(args.init_dir, args.arch + '_' + args.dataset + '_' + str(args.num_clusters) + '_desc_cen.hdf5')
+def local_cache_and_init(opt, pool_layer):
+    if opt.pooling in ['appsvr']:
+        sc_suffix = '_desc_cen_' + opt.pooling + 'sc.hdf5'
+        initcache = join(opt.init_dir, opt.arch + '_' +
+                            opt.dataset + '_' + str(opt.num_clusters) + sc_suffix)
+    else:
+        initcache = join(opt.init_dir, opt.arch + '_' +
+                            opt.dataset + '_' + str(opt.num_clusters) + '_desc_cen.hdf5')
+
+    if not exists(initcache):
+        print("initcache is:", initcache)
+        raise FileNotFoundError(
+            'Could not find clusters, please run with --mode=cluster before proceeding')
+
     if (dist.get_rank()==0):
         print ('Loading centroids from {}'.format(initcache))
+
     with h5py.File(initcache, mode='r') as h5:
-        pool_layer.clsts = h5.get("centroids")[...]
-        pool_layer.traindescs = h5.get("descriptors")[...]
+        if opt.pooling in ['appsvr']:
+            pool_layer.clsts = h5.get("centroids")[...]
+            pool_layer.shadowclsts = h5.get("centroids_shadow")[...]
+            pool_layer.traindescs = h5.get("descriptors")[...]
+        else:
+            pool_layer.clsts = h5.get("centroids")[...]
+            pool_layer.traindescs = h5.get("descriptors")[...]
         pool_layer._init_params()
 
-    model = models.create('embedregionnet', base_model, pool_layer, tuple_size=args.tuple_size)
+def get_model(args):
+    matconvnet_path = 'logs/vd16_offtheshelf_conv5_3_max.pth' if args.arch == 'vgg16' else None
+    base_model = models.create(args.arch, train_layers=args.layers, matconvnet=matconvnet_path)
+    pool_layer = models.create(args.pooling, dim=base_model.feature_dim)
+    # initcache = osp.join(args.init_dir, args.arch + '_' + args.dataset + '_' + str(args.num_clusters) + '_desc_cen.hdf5')
+    # if (dist.get_rank()==0):
+    #     print ('Loading centroids from {}'.format(initcache))
+    # with h5py.File(initcache, mode='r') as h5:
+    #     pool_layer.clsts = h5.get("centroids")[...]
+    #     pool_layer.traindescs = h5.get("descriptors")[...]
+    #     pool_layer._init_params()
+    local_cache_and_init(args, pool_layer)
+
+    model = models.create('embedregionnet', base_model, pool_layer, tuple_size=args.tuple_size, region_sim_strategy=args.pooling)
+
 
     if (args.syncbn):
         convert_sync_bn(model)
@@ -180,8 +215,60 @@ def main_worker(args):
         model.module._init_params()
 
         # Optimizer
-        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
-                                    lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        if args.pooling in ['appsvr','isapvladv2']:
+            params_encoder_w, params_encoder_b, params_netvlad_w, params_netvlad_c, params_attention_w, params_attention_b, params_attention_am = [], [], [], [], [], [], []
+            params_sa_w = []
+            for name, p in model.base_model.named_parameters():
+                if p.requires_grad:
+                    if 'bias' in name:
+                        params_encoder_b += [p]
+                    elif 'weight' in name:
+                        params_encoder_w += [p]
+            id_poolconv = []
+            for m in model.net_vlad.conv.parameters():
+                id_poolconv.append(id(m))
+            for name, p in model.net_vlad.named_parameters():
+                if p.requires_grad:
+                    if 'bias' in name:
+                        params_attention_b += [p]
+                    elif 'centroids' in name:
+                        params_netvlad_c += [p]
+                    elif 'weight' in name:
+                        if id(p) in id_poolconv:
+                            params_netvlad_w += [p]
+                        elif 'conv_sa' in name:
+                            params_sa_w += [p]
+                        else:
+                            params_attention_w += [p]
+                    elif 'W_cap' in name:
+                        params_attention_w += [p]
+                    elif 'cluster_weights' in name:
+                        params_attention_am += [p]
+
+            optimizer = torch.optim.SGD([
+                {'params': params_encoder_w,
+                    'weight_decay': args.weight_decay, 'lr': args.lr},
+                {'params': params_encoder_b,
+                    'lr': args.lr},
+                {'params': params_netvlad_w,
+                    'weight_decay': args.weight_decay, 'lr': args.lr},
+                {'params': params_netvlad_c,
+                    'lr': args.lr},
+                {'params': params_attention_w,
+                    'weight_decay': args.weight_decay, 'lr': args.lr},
+                {'params': params_attention_b,
+                    'lr': args.lr},
+                {'params': params_attention_am,
+                    'lr': args.lr*10},
+                {'params': params_sa_w, 'lr': args.lr*10},
+                ],
+                    momentum=args.momentum)
+        
+        else:
+            optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
+                                        lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+
+ 
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=0.5)
 
         if (gen==0):
@@ -259,7 +346,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="SFRS training")
     parser.add_argument('--launcher', type=str,
                         choices=['none', 'pytorch', 'slurm'],
-                        default='none', help='job launcher')
+                        default='pytorch', help='job launcher')
     parser.add_argument('--tcp-port', type=str, default='5017')
     # data
     parser.add_argument('-d', '--dataset', type=str, default='pitts',
@@ -314,4 +401,7 @@ if __name__ == '__main__':
                         default=osp.join(working_dir, 'logs'))
     parser.add_argument('--init-dir', type=str, metavar='PATH',
                         default=osp.join(working_dir, '..', 'logs'))
+    # pooling options
+    parser.add_argument('--pooling', type=str, default='netvlad', help='type of pooling to use',
+                        choices=['netvlad', 'appsvr'])
     main()

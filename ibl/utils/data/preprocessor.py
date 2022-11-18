@@ -30,6 +30,7 @@ class Preprocessor(Dataset):
 
     def _get_single_item(self, index):
         fname, pid, x, y = self.dataset[index]
+        fname = fname.replace(".png", ".jpg") # for tokyo
         fpath = fname
         if self.root is not None:
             fpath = osp.join(self.root, fname)

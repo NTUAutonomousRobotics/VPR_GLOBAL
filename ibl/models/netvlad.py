@@ -110,11 +110,12 @@ class EmbedNetPCA(nn.Module):
         return vlad_x
 
 class EmbedRegionNet(nn.Module):
-    def __init__(self, base_model, net_vlad, tuple_size=1):
+    def __init__(self, base_model, net_vlad, tuple_size=1, region_sim_strategy='netvlad'):
         super(EmbedRegionNet, self).__init__()
         self.base_model = base_model
         self.net_vlad = net_vlad
         self.tuple_size = tuple_size
+        self.region_sim_strategy = region_sim_strategy
 
     def _init_params(self):
         self.base_model._init_params()
@@ -128,12 +129,12 @@ class EmbedRegionNet(nn.Module):
             # re-arrange local features for aggregating quarter regions
             N, C, H, W = x.size()
             x = x.view(N, C, 2, int(H/2), 2, int(W/2))
-            x = x.permute(0,1,2,4,3,5).contiguous()
-            x = x.view(N, C, -1, int(H/2), int(W/2))
+            x = x.permute(0,1,2,4,3,5).contiguous() # N, C, 2, 2, H/2, W/2
+            x = x.view(N, C, -1, int(H/2), int(W/2)) # N, C, 4, H/2, W/2
             return x
 
-        feature_A = reshape(feature_A)
-        feature_B = reshape(feature_B)
+        feature_A = reshape(feature_A) # [1, 512, 4, 15, 20]
+        feature_B = reshape(feature_B) # [11, 512, 4, 15, 20]
 
         # compute quarter-region features
         def aggregate_quarter(x):
@@ -145,23 +146,23 @@ class EmbedRegionNet(nn.Module):
             vlad_x = vlad_x.view(N,B,cluster_num,feat_dim)
             return vlad_x
 
-        vlad_A_quarter = aggregate_quarter(feature_A)
-        vlad_B_quarter = aggregate_quarter(feature_B)
+        vlad_A_quarter = aggregate_quarter(feature_A) # [1,4,64,512]
+        vlad_B_quarter = aggregate_quarter(feature_B) # [11,4,64,512]
 
         # compute half-region features
         def quarter_to_half(vlad_x):
             return torch.stack((vlad_x[:,0]+vlad_x[:,1], vlad_x[:,2]+vlad_x[:,3], \
                                 vlad_x[:,0]+vlad_x[:,2], vlad_x[:,1]+vlad_x[:,3]), dim=1).contiguous()
 
-        vlad_A_half = quarter_to_half(vlad_A_quarter)
-        vlad_B_half = quarter_to_half(vlad_B_quarter)
+        vlad_A_half = quarter_to_half(vlad_A_quarter) # [1,1,64,512]
+        vlad_B_half = quarter_to_half(vlad_B_quarter) # [11,1,64,512]
 
         # compute global-image features
         def quarter_to_global(vlad_x):
             return vlad_x.sum(1).unsqueeze(1).contiguous()
 
-        vlad_A_global = quarter_to_global(vlad_A_quarter)
-        vlad_B_global = quarter_to_global(vlad_B_quarter)
+        vlad_A_global = quarter_to_global(vlad_A_quarter) # [1,1,64,512] 
+        vlad_B_global = quarter_to_global(vlad_B_quarter) # [11,1,64,512]
 
         def norm(vlad_x):
             N, B, C, _ = vlad_x.size()
@@ -170,12 +171,12 @@ class EmbedRegionNet(nn.Module):
             vlad_x = F.normalize(vlad_x, p=2, dim=2)  # L2 normalize
             return vlad_x
 
-        vlad_A = torch.cat((vlad_A_global, vlad_A_half, vlad_A_quarter), dim=1)
-        vlad_B = torch.cat((vlad_B_global, vlad_B_half, vlad_B_quarter), dim=1)
+        vlad_A = torch.cat((vlad_A_global, vlad_A_half, vlad_A_quarter), dim=1) # [1, 9, 32768]
+        vlad_B = torch.cat((vlad_B_global, vlad_B_half, vlad_B_quarter), dim=1) # [1, 9, 32768]
         vlad_A = norm(vlad_A)
         vlad_B = norm(vlad_B)
 
-        _, B, L = vlad_B.size()
+        _, B, L = vlad_B.size() # 9,32768 ##9=1+4+4
         vlad_A = vlad_A.view(self.tuple_size,-1,B,L)
         vlad_B = vlad_B.view(self.tuple_size,-1,B,L)
 
@@ -198,10 +199,11 @@ class EmbedRegionNet(nn.Module):
 
         if (not self.training):
             vlad_x = self.net_vlad(x)
-            # normalize
-            vlad_x = F.normalize(vlad_x, p=2, dim=2)  # intra-normalization
-            vlad_x = vlad_x.view(x.size(0), -1)  # flatten
-            vlad_x = F.normalize(vlad_x, p=2, dim=1)  # L2 normalize
+            if self.region_sim_strategy == 'netvlad':
+                # normalize
+                vlad_x = F.normalize(vlad_x, p=2, dim=2)  # intra-normalization
+                vlad_x = vlad_x.view(x.size(0), -1)  # flatten
+                vlad_x = F.normalize(vlad_x, p=2, dim=1)  # L2 normalize
             return pool_x, vlad_x
 
         return self._forward_train(x)

@@ -238,6 +238,7 @@ class SFRSTrainer(object):
         inputs_diff = inputs_diff.view(-1, C, H, W)
 
         sim_easy, vlad_anchors, vlad_pairs = self.model(inputs_easy)
+        # sim_easy: B*(1+neg_num)*9*9  1,11,9,9
         # vlad_anchors: B*1*9*L
         # vlad_pairs: B*(1+neg_num)*9*L
         with torch.no_grad():

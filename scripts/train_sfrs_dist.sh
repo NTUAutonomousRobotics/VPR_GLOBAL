@@ -1,6 +1,6 @@
 #!/bin/sh
 PYTHON=${PYTHON:-"python"}
-GPUS=4
+GPUS=1
 
 DATASET=pitts
 SCALE=30k
@@ -8,6 +8,8 @@ ARCH=vgg16
 LAYERS=conv5
 LOSS=sare_ind
 LR=0.001
+
+POOLING=netvlad
 
 while true # find unused tcp port
 do
@@ -26,5 +28,6 @@ examples/netvlad_img_sfrs.py --launcher pytorch --tcp-port ${PORT} \
   --neg-num 10  --pos-pool 20 --neg-pool 1000 --pos-num 10 \
   --margin 0.1 --lr ${LR} --weight-decay 0.001 --loss-type ${LOSS} --soft-weight 0.5 \
   --eval-step 1 --epochs 5 --step-size 5 --cache-size 1000 --generations 4 --temperature 0.07 0.07 0.06 0.05 \
-  --logs-dir logs/netVLAD/${DATASET}${SCALE}-${ARCH}/${LAYERS}-${LOSS}-lr${LR}-tuple${GPUS}-SFRS
+  --logs-dir logs/netVLAD/${DATASET}${SCALE}-${ARCH}/${LAYERS}-${LOSS}-lr${LR}-tuple${GPUS}-SFRS \
+  --pooling ${POOLING}
   # --sync-gather

@@ -115,7 +115,7 @@ class Tokyo(Dataset):
             db_ids = []
             for fpath, utm in zip(struct.dbImage, struct.utmDb):
                 sid = osp.dirname(fpath)
-                fpath = fpath[:-3]+'png'
+                fpath = fpath[:-3]+'jpg'
                 # sid = str(utm[0])+'_'+str(utm[1])
                 # sid = fpath[:-12]
                 if (sid not in db_pids.keys()):

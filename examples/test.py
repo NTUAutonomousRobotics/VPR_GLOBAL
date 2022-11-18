@@ -177,5 +177,5 @@ if __name__ == '__main__':
 
     # pooling options
     parser.add_argument('--pooling', type=str, default='netvlad', help='type of pooling to use',
-                        choices=['netvlad', 'appsvr'])
+                        choices=['netvlad', 'appsvr','isapvladv2'])
     main()

@@ -99,7 +99,7 @@ def update_sampler(sampler, model, loader, query, gallery, sub_set, rerank=False
     del distmat, distmat_jac
 
 def local_cache_and_init(opt, pool_layer):
-    if opt.pooling in ['appsvr']:
+    if opt.pooling in ['appsvr','isapvladv2']:
         sc_suffix = '_desc_cen_' + opt.pooling + 'sc.hdf5'
         initcache = join(opt.init_dir, opt.arch + '_' +
                             opt.dataset + '_' + str(opt.num_clusters) + sc_suffix)
@@ -116,7 +116,7 @@ def local_cache_and_init(opt, pool_layer):
         print ('Loading centroids from {}'.format(initcache))
 
     with h5py.File(initcache, mode='r') as h5:
-        if opt.pooling in ['appsvr']:
+        if opt.pooling in ['appsvr','isapvladv2']:
             pool_layer.clsts = h5.get("centroids")[...]
             pool_layer.shadowclsts = h5.get("centroids_shadow")[...]
             pool_layer.traindescs = h5.get("descriptors")[...]
@@ -421,5 +421,5 @@ if __name__ == '__main__':
                         default=osp.join(working_dir, '..', 'logs'))
     # pooling options
     parser.add_argument('--pooling', type=str, default='netvlad', help='type of pooling to use',
-                        choices=['netvlad', 'appsvr'])
+                        choices=['netvlad', 'appsvr','isapvladv2'])
     main()

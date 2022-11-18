@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 from .vgg import *
 from .netvlad import *
+from .isapvladv2 import *
 
 
 __factory = {
@@ -10,6 +11,7 @@ __factory = {
     'embednet': EmbedNet,
     'embednetpca': EmbedNetPCA,
     'embedregionnet': EmbedRegionNet,
+    'isapvladv2':ISAPVLADV2,
 }
 
 

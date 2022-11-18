@@ -9,7 +9,8 @@ LAYERS=conv5
 LOSS=sare_ind
 LR=0.001
 
-POOLING=netvlad
+POOLING=isapvladv2
+#netvlad
 EPOCHS=5
 #5
 GENERATIONS=4
